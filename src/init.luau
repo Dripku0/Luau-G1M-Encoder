@@ -1,13 +1,6 @@
 local fs = require("@lune/fs")
 local stdio = require("@lune/stdio")
 
-local HEADER = {
-    0xAAACBDAF,
-    0x90889A8D
-}
-
-local FILE_VERSION = 0xCE
-
 local writeu32 = buffer.writeu32
 local writeu16 = buffer.writeu16
 local writeu8 = buffer.writeu8
@@ -16,15 +9,26 @@ local band = bit32.band
 local bxor = bit32.bxor
 local byteswap = bit32.byteswap
 
+local HEADER = {0xAAACBDAF, 0x90889A8D}
+
+local UNKNOWN = {
+    byteswap(0xFFEFFFEF), -- @0x09
+    0xFF,       -- @0x0D
+    0xFE,       -- @0x0F
+    1,          -- @0x33
+    1,          -- @0x44
+    0xFEFF      -- @0x1E
+}
+
+local FILE_VERSION = 0xCE
+
 local function writeu64(buffer_: buffer, position: number, u32: { number})
     buffer.writeu32(buffer_, position, byteswap(u32[1]))
     buffer.writeu32(buffer_, position + 4, byteswap(u32[2]))
 end
 
 --[=[
-    Writes a 64-bit unsigned integer to the buffer at the specified position.
-    The input is a table with two 32-bit unsigned integers, which are written in
-    big-endian order.
+    Writes the header to the buffer at @0x00.
 
     @param out The buffer to write to.
     @param signature A table containing two 32-bit unsigned integers representing the signature.
@@ -48,12 +52,12 @@ end
     @return nil
 ]=]
 local function writeUnknown(out: buffer)
-    writeu32(out, 0x09, byteswap(0xFFEFFFEF))
-    writeu8(out, 0x0D, 0xFF)
-    writeu32(out, 0x0F, 0xFE)
-    writeu8(out, 0x33, 1)
-    writeu32(out, 0x44, 1)
-    writeu16(out, 0x1E, 0xFEFF)
+    writeu32(out, 0x09, UNKNOWN[1])
+    writeu8(out, 0x0D, UNKNOWN[2])
+    writeu32(out, 0x0F, UNKNOWN[3])
+    writeu8(out, 0x33, UNKNOWN[4])
+    writeu32(out, 0x44, UNKNOWN[5])
+    writeu16(out, 0x1E, UNKNOWN[6])
 end
 
 --[=[
@@ -95,9 +99,9 @@ local function encode(name: string, program: string)
     assert(#name <= 8, "Name must be 8 characters or less")
 
     local program_size = #program
-    local end_bytes = 4 - ((program_size + 10) % 4)
+    local end_bytes = 4 - ((program_size + 0x0A) % 4)
 
-    local output = buffer.create(program_size + 86 + end_bytes)
+    local output = buffer.create(program_size + 0x56 + end_bytes)
 
     writeHeader(output, HEADER, FILE_VERSION, program_size + 0x0A + end_bytes)
     writeUnknown(output)
