@@ -28,23 +28,6 @@ local function writeu64(buffer_: buffer, position: number, u32: { number})
 end
 
 --[=[
-    Writes the header to the buffer at @0x00.
-
-    @param out The buffer to write to.
-    @param signature A table containing two 32-bit unsigned integers representing the signature.
-    @param version The version number to write.
-    @param program_size The size of the program to write.
-    @return nil
-]=]
-local function writeHeader(out: buffer, signature: { number }, version: number, program_size: number)
-    writeu64(out, 0x00, signature)
-    writeu8(out, 0x08, version)
-
-    -- Integrity 1: Calculated as (0x72 - @0x48) & 0xFF
-    writeu8(out, 0x0E, band(0x72 - program_size, 0xFF))
-end
-
---[=[
     Writes unknown data to the buffer at a specific position.
     This function writes a fixed pattern of bytes to the output buffer.
 
@@ -61,6 +44,26 @@ local function writeUnknown(out: buffer)
 end
 
 --[=[
+    Writes the header to the buffer at @0x00.
+
+    @param out The buffer to write to.
+    @param signature A table containing two 32-bit unsigned integers representing the signature.
+    @param version The version number to write.
+    @param program_size The size of the program to write.
+    @return nil
+]=]
+local function writeHeader(out: buffer, signature: { number }, version: number, program_size: number)
+    writeu64(out, 0x00, signature)
+    writeu8(out, 0x08, version)
+
+    --[=[
+        Integrity 1: Calculated as (0x72 - @0x48) & 0xFF
+        https://www.cemetech.net/forum/viewtopic.php?t=1
+    ]=]
+    writeu8(out, 0x0E, band(0x72 - program_size, 0xFF))
+end
+
+--[=[
     Writes metadata to the output buffer at a specific position.
     This function writes metadata such as file size, program size, and other
     information to the output buffer.
@@ -72,12 +75,15 @@ end
     @return nil
 ]=]
 local function writeMetadata(name: string, out: buffer, file_size: number, program_size: number)
-    local occupied_size = byteswap(bxor(file_size, 0xFFFFFFFF))
+    local inverted_size = byteswap(bxor(file_size, 0xFFFFFFFF))
 
-    writeu32(out, 0x10, occupied_size)
+    writeu32(out, 0x10, inverted_size)
     
-    -- Integrity 2: Calculated as ((@0x10 & 0xFF) + 0x48) & 0xFF
-    writeu8(out, 0x14, band(band(byteswap(occupied_size), 0xFF) + 0x48, 0xFF))
+    --[=[
+        Integrity 2: Calculated as ((@0x10 & 0xFF) + 0x48) & 0xFF
+        https://www.cemetech.net/forum/viewtopic.php?t=1
+    ]=]
+    writeu8(out, 0x14, band(band(byteswap(inverted_size), 0xFF) + 0x48, 0xFF))
     
     writestring(out, 0x20, "PROGRAM")
     writestring(out, 0x34, "system")
